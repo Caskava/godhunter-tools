@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>God Hunter — Culture Guide</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+.culture-card { width:100%; max-width:740px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:24px; margin-bottom:12px; }
+.culture-header { display:flex; align-items:baseline; gap:12px; margin-bottom:12px; }
+.culture-label { font-family:'Cinzel',serif; font-size:16px; font-weight:700; color:var(--gold); letter-spacing:0.08em; }
+.culture-real { font-size:13px; color:var(--text3); font-style:italic; }
+.culture-desc { font-size:13px; color:var(--text2); margin-bottom:12px; }
+.culture-examples { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.example-pill { background:var(--surface2); border:1px solid var(--border2); border-radius:20px; padding:3px 12px; font-family:'Cinzel',serif; font-size:11px; color:var(--text2); letter-spacing:0.06em; }
+.culture-mix { font-size:12px; color:var(--text3); font-style:italic; padding-top:12px; border-top:1px solid var(--border); }
+.section-divider { width:100%; max-width:740px; margin:24px 0 16px; }
+.section-divider h2 { font-family:'Cinzel',serif; font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--text3); }
+.mix-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; max-width:740px; margin-bottom:24px; }
+@media(max-width:560px){ .mix-grid { grid-template-columns:1fr; } }
+.mix-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px; }
+.mix-pair { font-family:'Cinzel',serif; font-size:11px; color:var(--gold); letter-spacing:0.05em; margin-bottom:5px; }
+.mix-note { font-size:13px; color:var(--text3); font-style:italic; }
+</style>
+</head>
+<body>
+<div class="ambient"></div>
+<div class="wrap">
+
+  <div class="header">
+    <div class="header-eyebrow">Ancient Heritage</div>
+    <h1 class="header-title">God <span>Hunter</span></h1>
+    <p class="header-sub">Culture Guide</p>
+    <div class="rule"><hr/><div class="gem"></div><hr/></div>
+  </div>
+
+  <nav class="nav">
+    <a class="nav-btn" href="index.html">Generator</a>
+    <a class="nav-btn" href="compendium.html">Compendium</a>
+    <a class="nav-btn active" href="culture-guide.html">Culture Guide</a>
+    <a class="nav-btn" href="syllable-editor.html">Syllable Editor</a>
+  </nav>
+
+  <div id="cultureCards"></div>
+
+  <div class="section-divider"><h2>Mixed Heritage Combinations</h2></div>
+  <div class="mix-grid" id="mixGrid"></div>
+
+</div>
+<script src="cultures.js"></script>
+<script>
+
+const cards = document.getElementById('cultureCards');
+const mixGrid = document.getElementById('mixGrid');
+
+Object.entries(CULTURES).forEach(([key, d]) => {
+  const card = document.createElement('div');
+  card.className = 'culture-card';
+  card.innerHTML = `
+    <div class="culture-header">
+      <span class="culture-label">${d.label}</span>
+      <span class="culture-real">${d.realWorld}</span>
+    </div>
+    <div class="culture-desc">${d.desc}</div>
+    <div class="culture-examples">
+      ${d.preview.map(n => `<span class="example-pill">${n}</span>`).join('')}
+    </div>
+    <div style="margin-bottom:8px">
+      <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text3)">Middle names:</span>
+      <span style="font-size:13px;color:var(--text2);margin-left:6px">${d.midNames.length ? d.midNames.join(', ') : '—'}</span>
+    </div>
+    <div style="margin-bottom:8px">
+      <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text3)">Middle name chance:</span>
+      <span style="font-size:13px;color:var(--text2);margin-left:6px">${Math.round(d.midChance * 100)}%</span>
+    </div>
+    <div class="culture-mix">${d.mixNote}</div>`;
+  cards.appendChild(card);
+});
+
+Object.entries(MIXED_GUIDE).forEach(([pair, note]) => {
+  const card = document.createElement('div');
+  card.className = 'mix-card';
+  card.innerHTML = `<div class="mix-pair">${pair}</div><div class="mix-note">${note}</div>`;
+  mixGrid.appendChild(card);
+});
+
+</script>
+</body>
+</html>

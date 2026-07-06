@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>God Hunter — Name Generator</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<div class="ambient"></div>
+<div class="wrap">
+
+  <div class="header">
+    <div class="header-eyebrow">Ancient Heritage</div>
+    <h1 class="header-title">God <span>Hunter</span></h1>
+    <p class="header-sub">Name Generator</p>
+    <div class="rule"><hr/><div class="gem"></div><hr/></div>
+  </div>
+
+  <nav class="nav">
+    <a class="nav-btn active" href="index.html">Generator</a>
+    <a class="nav-btn" href="compendium.html">Compendium</a>
+    <a class="nav-btn" href="culture-guide.html">Culture Guide</a>
+    <a class="nav-btn" href="syllable-editor.html">Syllable Editor</a>
+  </nav>
+
+  <div class="cultures" id="cultures"></div>
+
+  <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:16px 0;max-width:740px;width:100%" id="options">
+    <button class="pill active" data-opt="first">First Name</button>
+    <button class="pill" data-opt="last">Last Name</button>
+    <button class="pill active" data-opt="mid">+ Middle</button>
+    <button class="pill" data-opt="lock">🔒 Lock First</button>
+    <button class="pill" data-opt="batch">Batch ×10</button>
+    <button class="pill active" data-opt="short">Short</button>
+    <button class="pill" data-opt="long">Long</button>
+    <button class="pill active" data-opt="masc">Masc</button>
+    <button class="pill active" data-opt="fem">Fem</button>
+    <button class="pill active" data-opt="neut">Neutral</button>
+  </div>
+
+  <!-- Blend mode -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;max-width:740px;width:100%;flex-wrap:wrap">
+    <span style="font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text3)">Culture Blend:</span>
+    <select id="blendSelect" style="width:auto;flex:1;min-width:180px">
+      <option value="">— Off —</option>
+    </select>
+    <span style="font-size:12px;color:var(--text3);font-style:italic" id="blendNote"></span>
+  </div>
+
+  <button class="invoke-btn" id="genBtn">INVOCATION</button>
+
+  <div class="result-area" id="resultArea">
+    <div class="result-empty">Choose your heritage and invoke a name.</div>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:center;margin-bottom:36px;max-width:740px;width:100%" id="resultActions" style="display:none">
+  </div>
+
+  <div class="list-section">
+    <div class="list-head">
+      <span class="list-title">Recent Names</span>
+      <button class="btn danger" id="clearBtn">Clear</button>
+    </div>
+    <div class="list-items" id="historyList"></div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+<script src="cultures.js"></script>
+<script>
+
+// ── GENERATION ENGINE ─────────────────────────────────────────────────────
+
+const MAX_CHARS = 11;
+const VOWELS = new Set(['a','e','i','o','u']);
+
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const maybe = p => Math.random() < p;
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
+function wpick(arr) {
+  const total = arr.reduce((s,[,w]) => s+w, 0);
+  let r = Math.random() * total;
+  for (const [v,w] of arr) { r -= w; if (r <= 0) return v; }
+  return arr[arr.length-1][0];
+}
+
+function isVowel(ch) { return VOWELS.has(ch.toLowerCase()); }
+
+function hasEveryVowel(s) {
+  for (let i = 0; i <= s.length - 3; i++) {
+    if (!isVowel(s[i]) && !isVowel(s[i+1]) && !isVowel(s[i+2])) return false;
+  }
+  return true;
+}
+
+function noStartForbidden(s, forbidden) {
+  if (!forbidden || !forbidden.length) return true;
+  return !forbidden.includes(s[0].toLowerCase());
+}
+
+function isValid(name, culture) {
+  const c = CULTURES[culture];
+  if (name.length > MAX_CHARS) return false;
+  if (!hasEveryVowel(name)) return false;
+  if (!noStartForbidden(name, c.forbidStart)) return false;
+  return true;
+}
+
+function phonetic(name) {
+  // Simple syllabification — split on vowel groups
+  return name.replace(/([aeiou]+)/gi, '-$1-').replace(/--/g,'-').replace(/^-|-$/g,'').toLowerCase();
+}
+
+function buildFirst(cKey, gender) {
+  const c = CULTURES[cKey];
+  const syls = gender === 'm' ? c.sylsM : gender === 'f' ? c.sylsF : c.sylsN;
+  const endings = gender === 'm' ? c.endM : gender === 'f' ? c.endF : c.endN;
+  let name, attempts = 0;
+  do {
+    // Length mode: short = 1 syllable, long = 2 syllables, neither = random
+    const numSyls = opts.short ? 1 : opts.long ? 2 : (maybe(0.55) ? 1 : 2);
+    let base = pick(syls);
+    if (numSyls > 1) base += pick(syls);
+    const ending = wpick(endings);
+    const cleanBase = (base.length && ending.length && base[base.length-1].toLowerCase() === ending[0].toLowerCase()) ? base.slice(0,-1) : base;
+    name = cleanBase + ending;
+    attempts++;
+  } while (!isValid(name, cKey) && attempts < 30);
+  return cap(name);
+}
+
+function buildLast(cKey) {
+  const c = CULTURES[cKey];
+  let name, attempts = 0;
+  do {
+    const numSyls = maybe(0.5) ? 1 : 2;
+    let base = pick(c.lnOnsets);
+    if (numSyls > 1) base += pick(c.lnNuclei);
+    name = base + pick(c.lnEnd);
+    attempts++;
+  } while (!isValid(name, cKey) && attempts < 30);
+  return cap(name);
+}
+
+function buildMid(cKey) {
+  const c = CULTURES[cKey];
+  if (!c.midNames || !c.midNames.length) return '';
+  return pick(c.midNames);
+}
+
+function pickGender() {
+  const g = [];
+  if (opts.masc) g.push('m');
+  if (opts.fem) g.push('f');
+  if (opts.neut) g.push('n');
+  return g.length ? pick(g) : 'n';
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────
+
+let activeCulture = 'Saladisi';
+let history = JSON.parse(localStorage.getItem('gh_ng_history') || '[]');
+let opts = { first:true, last:false, mid:true, lock:false, batch:false, short:true, long:false, masc:true, fem:true, neut:true };
+let currentFullName = '';
+let currentCulture = '';
+let lockedFirst = '';
+
+// ── COMPENDIUM BRIDGE ─────────────────────────────────────────────────────
+
+function saveToCompendium(name, culture, note) {
+  const comp = JSON.parse(localStorage.getItem('gh_ng_compendium') || '[]');
+  if (comp.find(e => e.name === name)) return;
+  comp.push({ name, culture, note: note||'', ts: Date.now(), fav: false });
+  localStorage.setItem('gh_ng_compendium', JSON.stringify(comp));
+}
+
+function saveHistory() { localStorage.setItem('gh_ng_history', JSON.stringify(history)); }
+
+function addToHistory(name, culture, note) {
+  if (history.length && history[history.length-1].name === name) return;
+  history.push({ name, culture, note: note||'', ts: Date.now() });
+  if (history.length > 40) history.shift();
+  saveHistory(); renderHistory();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!history.length) { el.innerHTML = '<div class="list-empty">No names yet.</div>'; return; }
+  el.innerHTML = history.slice().reverse().map((item, i) => {
+    const ri = history.length - 1 - i;
+    const lbl = CULTURES[item.culture] ? CULTURES[item.culture].label : item.culture;
+    return `<div class="list-item">
+      <div style="flex:1;min-width:0">
+        <div class="list-item-name">${item.name}</div>
+        <div class="list-item-meta">${lbl}${item.note ? ' · ' + item.note : ''}</div>
+      </div>
+      <div class="list-item-actions">
+        <button class="btn" data-copy="${item.name}">Copy</button>
+        <button class="btn" data-save="${item.name}" data-cult="${item.culture}">Save</button>
+        <button class="btn danger" data-del="${ri}">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => {
+    navigator.clipboard.writeText(b.dataset.copy); showToast('Copied — ' + b.dataset.copy);
+  }));
+  el.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', () => {
+    saveToCompendium(b.dataset.save, b.dataset.cult);
+    showToast('Saved to Compendium — ' + b.dataset.save);
+  }));
+  el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    history.splice(parseInt(b.dataset.del), 1); saveHistory(); renderHistory();
+  }));
+}
+
+function showResult(name, displayLabel, cultureKey) {
+  currentFullName = name; currentCulture = cultureKey;
+  const phon = phonetic(name);
+  document.getElementById('resultArea').innerHTML = `
+    <div class="result-name" title="Highlight to copy">${name}</div>
+    <div class="result-meta">${displayLabel}</div>
+    <div class="result-phonetic">${phon}</div>
+    <div class="result-hint">Highlight any part to copy &amp; save</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+      <button class="btn primary" id="rCopy">Copy</button>
+      <button class="btn" id="rSave">Save to Compendium</button>
+    </div>`;
+  document.getElementById('rCopy').addEventListener('click', () => {
+    navigator.clipboard.writeText(name); showToast('Copied — ' + name);
+  });
+  document.getElementById('rSave').addEventListener('click', () => {
+    saveToCompendium(name, cultureKey);
+    addToHistory(name, cultureKey, 'saved');
+    showToast('Saved — ' + name);
+  });
+}
+
+function renderCultures() {
+  const el = document.getElementById('cultures');
+  el.innerHTML = Object.entries(CULTURES).map(([key, d]) => `
+    <button class="cult-btn${key === activeCulture ? ' active' : ''}" data-key="${key}">
+      <span class="cult-name">${d.label}</span>
+      <span class="cult-desc">${d.desc}</span>
+      <span class="cult-preview">${d.preview.join(' · ')}</span>
+    </button>`).join('');
+  el.querySelectorAll('.cult-btn').forEach(b => b.addEventListener('click', () => {
+    activeCulture = b.dataset.key; renderCultures(); updateBlendNote();
+  }));
+}
+
+function renderBlendOptions() {
+  const sel = document.getElementById('blendSelect');
+  const keys = Object.keys(CULTURES);
+  keys.forEach(key => {
+    if (key === activeCulture) return;
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = CULTURES[key].label;
+    sel.appendChild(opt);
+  });
+}
+
+function updateBlendNote() {
+  const sel = document.getElementById('blendSelect');
+  const blendKey = sel.value;
+  const note = document.getElementById('blendNote');
+  if (!blendKey) { note.textContent = ''; return; }
+  // Find mix note
+  const a = CULTURES[activeCulture].label;
+  const b = CULTURES[blendKey].label;
+  const guideKey = Object.keys(MIXED_GUIDE).find(k => k.includes(a) && k.includes(b));
+  note.textContent = guideKey ? MIXED_GUIDE[guideKey] : 'Custom blend — mix first from one culture, last from another.';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function updateGenderVisibility() {
+  document.querySelectorAll('[data-opt="masc"],[data-opt="fem"],[data-opt="neut"],[data-opt="mid"],[data-opt="lock"]')
+    .forEach(b => b.style.display = opts.first ? '' : 'none');
+}
+
+// ── OPTIONS ───────────────────────────────────────────────────────────────
+
+document.getElementById('options').querySelectorAll('.pill').forEach(btn => {
+  const key = btn.dataset.opt;
+  btn.addEventListener('click', () => {
+    if (key === 'first' || key === 'last') {
+      opts.first = false; opts.last = false; opts[key] = true;
+      document.querySelectorAll('[data-opt="first"],[data-opt="last"]')
+        .forEach(b => b.classList.toggle('active', b.dataset.opt === key));
+      if (key === 'last') {
+        opts.lock = false; lockedFirst = '';
+        const lb = document.querySelector('[data-opt="lock"]');
+        lb.classList.remove('lock-on','active'); lb.textContent = '🔒 Lock First';
+      }
+      updateGenderVisibility();
+    } else if (key === 'short' || key === 'long') {
+      // Toggle pair — clicking active one turns both off (random mode)
+      if (opts[key]) {
+        opts.short = false; opts.long = false;
+        document.querySelectorAll('[data-opt="short"],[data-opt="long"]')
+          .forEach(b => b.classList.remove('active'));
+      } else {
+        opts.short = false; opts.long = false; opts[key] = true;
+        document.querySelectorAll('[data-opt="short"],[data-opt="long"]')
+          .forEach(b => b.classList.toggle('active', b.dataset.opt === key));
+      }
+    } else if (key === 'lock') {
+      if (lockedFirst) {
+        opts.lock = false; lockedFirst = '';
+        btn.classList.remove('lock-on','active'); btn.textContent = '🔒 Lock First';
+        showToast('First name unlocked');
+      } else if (currentFullName && opts.first) {
+        lockedFirst = currentFullName.split(' ')[0];
+        opts.lock = true; btn.classList.add('lock-on');
+        btn.textContent = '🔓 ' + lockedFirst;
+        showToast('Locked: ' + lockedFirst);
+      } else { showToast('Generate a first name to lock it'); }
+    } else {
+      opts[key] = !opts[key]; btn.classList.toggle('active', opts[key]);
+    }
+  });
+});
+
+// ── GENERATE ──────────────────────────────────────────────────────────────
+
+function generateOneName(gender) {
+  const blendKey = document.getElementById('blendSelect').value;
+  const mode = opts.last ? 'last' : 'first';
+  let first = '', mid = '', last = '';
+  let firstCulture = activeCulture;
+  let lastCulture = blendKey || activeCulture;
+  let displayCulture = blendKey
+    ? `${CULTURES[activeCulture].label} + ${CULTURES[blendKey].label}`
+    : CULTURES[activeCulture].label;
+
+  if (mode === 'first') {
+    if (opts.lock && lockedFirst) {
+      first = lockedFirst;
+      last = buildLast(lastCulture);
+    } else {
+      first = buildFirst(firstCulture, gender);
+      if (blendKey) {
+        last = buildLast(blendKey);
+      } else if (opts.mid && maybe(CULTURES[activeCulture].midChance)) {
+        mid = buildMid(activeCulture);
+      }
+    }
+  }
+  if (mode === 'last') last = buildLast(lastCulture);
+
+  return { name: [first, mid, last].filter(Boolean).join(' '), display: displayCulture, cultureKey: activeCulture };
+}
+
+document.getElementById('genBtn').addEventListener('click', () => {
+  const gender = pickGender();
+  const batch = opts.batch;
+
+  if (batch) {
+    // Generate 10 names, show as list
+    const results = Array.from({length:10}, () => generateOneName(gender));
+    currentFullName = results[0].name;
+    currentCulture = results[0].cultureKey;
+    document.getElementById('resultArea').innerHTML = `
+      <div style="width:100%;display:flex;flex-direction:column;gap:4px">
+        ${results.map((r,i) => `
+          <div class="list-item" style="animation:nameReveal 0.3s ${i*0.04}s both">
+            <div style="flex:1">
+              <div class="list-item-name" style="font-size:16px">${r.name}</div>
+              <div class="list-item-meta">${r.display}</div>
+            </div>
+            <div class="list-item-actions">
+              <button class="btn" data-copy="${r.name}">Copy</button>
+              <button class="btn" data-bsave="${r.name}" data-bcult="${r.cultureKey}">Save</button>
+            </div>
+          </div>`).join('')}
+      </div>`;
+    document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => {
+      navigator.clipboard.writeText(b.dataset.copy); showToast('Copied — ' + b.dataset.copy);
+    }));
+    document.querySelectorAll('[data-bsave]').forEach(b => b.addEventListener('click', () => {
+      saveToCompendium(b.dataset.bsave, b.dataset.bcult);
+      addToHistory(b.dataset.bsave, b.dataset.bcult, '');
+      showToast('Saved — ' + b.dataset.bsave);
+    }));
+    results.forEach(r => addToHistory(r.name, r.cultureKey, ''));
+  } else {
+    const r = generateOneName(gender);
+    showResult(r.name, r.display, r.cultureKey);
+    addToHistory(r.name, r.cultureKey, '');
+  }
+});
+
+document.addEventListener('copy', () => {
+  const sel = window.getSelection()?.toString()?.trim();
+  if (!sel || !currentFullName) return;
+  if (!currentFullName.toLowerCase().includes(sel.toLowerCase())) return;
+  saveToCompendium(sel, currentCulture);
+  showToast('Saved to Compendium — ' + sel);
+});
+
+document.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target === document.body)
+    document.getElementById('genBtn').click();
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  history = []; saveHistory(); renderHistory(); showToast('History cleared');
+});
+
+document.getElementById('blendSelect').addEventListener('change', updateBlendNote);
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+
+renderCultures();
+renderBlendOptions();
+renderHistory();
+updateGenderVisibility();
+</script>
+</body>
+</html>

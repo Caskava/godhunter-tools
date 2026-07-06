@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>God Hunter — Syllable Editor</title>
+<link rel="stylesheet" href="styles.css"/>
+<style>
+.editor-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; width:100%; max-width:740px; margin-bottom:16px; }
+@media(max-width:560px){ .editor-grid { grid-template-columns:1fr; } }
+.pool-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:16px; }
+.pool-title { font-family:'Cinzel',serif; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+.tag-list { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; min-height:32px; }
+.tag { background:var(--surface2); border:1px solid var(--border2); border-radius:20px; padding:2px 10px; font-family:'Cinzel',serif; font-size:11px; color:var(--text2); letter-spacing:0.04em; display:flex; align-items:center; gap:4px; }
+.tag-del { cursor:pointer; color:var(--text3); font-size:10px; transition:color 0.15s; background:none; border:none; padding:0; line-height:1; }
+.tag-del:hover { color:var(--red-light); }
+.add-row { display:flex; gap:6px; }
+.add-row input { flex:1; font-size:13px; }
+.add-row button { flex-shrink:0; }
+.status-bar { font-size:12px; color:var(--text3); font-style:italic; text-align:center; padding:8px; }
+.batch-toggle { font-size:11px; color:var(--gold); cursor:pointer; text-align:right; margin-top:6px; text-decoration:underline; text-underline-offset:2px; }
+.batch-panel { margin-top:8px; display:none; }
+.batch-panel.open { display:block; }
+.batch-panel textarea { width:100%; min-height:64px; font-size:12px; font-family:'Courier New',monospace; resize:vertical; margin-bottom:6px; }
+.batch-hint { font-size:10px; color:var(--text3); margin-bottom:6px; }
+.batch-row { display:flex; gap:6px; align-items:center; }
+.batch-preview { font-size:11px; color:var(--text3); flex:1; }
+</style>
+</head>
+<body>
+<div class="ambient"></div>
+<div class="wrap">
+
+  <div class="header">
+    <div class="header-eyebrow">Ancient Heritage</div>
+    <h1 class="header-title">God <span>Hunter</span></h1>
+    <p class="header-sub">Syllable Editor</p>
+    <div class="rule"><hr/><div class="gem"></div><hr/></div>
+  </div>
+
+  <nav class="nav">
+    <a class="nav-btn" href="index.html">Generator</a>
+    <a class="nav-btn" href="compendium.html">Compendium</a>
+    <a class="nav-btn" href="culture-guide.html">Culture Guide</a>
+    <a class="nav-btn active" href="syllable-editor.html">Syllable Editor</a>
+  </nav>
+
+  <div style="width:100%;max-width:740px;margin-bottom:16px">
+    <p style="font-size:14px;color:var(--text3);font-style:italic;text-align:center">
+      Edits are saved to your browser and override the default pools in the generator.
+      Click a syllable to remove it. Add new ones using the input below each pool.
+    </p>
+  </div>
+
+  <!-- Culture selector -->
+  <div style="display:flex;gap:8px;align-items:center;max-width:740px;width:100%;margin-bottom:20px;flex-wrap:wrap">
+    <label style="margin:0;white-space:nowrap">Culture:</label>
+    <select id="cultSelect" style="flex:1;max-width:240px"></select>
+    <button class="btn danger" id="resetCult">Reset to Defaults</button>
+    <button class="btn danger" id="resetAll">Reset All</button>
+  </div>
+
+  <div class="pool-card" style="width:100%;max-width:740px;margin-bottom:16px">
+    <div class="pool-title">Quick Batch Import <span style="color:var(--text3);font-weight:400">(targets one pool at a time)</span></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <select id="quickPoolSelect" style="flex:1;min-width:160px"></select>
+    </div>
+    <textarea id="quickBatchText" placeholder="Paste syllables: lun, mira, vea, pia, bri, cris, flor, sera, tiz, riz" style="width:100%;min-height:54px;font-size:12px;font-family:'Courier New',monospace;resize:vertical;margin-bottom:6px"></textarea>
+    <div class="batch-row">
+      <span class="batch-preview" id="quickBatchPreview"></span>
+      <button class="btn primary" id="quickBatchAdd">Import to Selected Pool</button>
+    </div>
+  </div>
+
+  <div class="editor-grid" id="editorGrid"></div>
+
+  <div class="status-bar" id="statusBar"></div>
+
+</div>
+<div class="toast" id="toast"></div>
+<script src="cultures.js"></script>
+<script>
+
+// Load overrides from localStorage, fall back to defaults
+function loadOverrides() {
+  return JSON.parse(localStorage.getItem('gh_ng_overrides') || '{}');
+}
+function saveOverrides(overrides) {
+  localStorage.setItem('gh_ng_overrides', JSON.stringify(overrides));
+}
+
+function getPool(cKey, poolName) {
+  const overrides = loadOverrides();
+  if (overrides[cKey] && overrides[cKey][poolName]) return [...overrides[cKey][poolName]];
+  return [...(CULTURES[cKey][poolName] || [])];
+}
+
+function setPool(cKey, poolName, arr) {
+  const overrides = loadOverrides();
+  if (!overrides[cKey]) overrides[cKey] = {};
+  overrides[cKey][poolName] = arr;
+  saveOverrides(overrides);
+  updateStatus(cKey);
+}
+
+let activeCulture = 'Saladisi';
+
+const POOLS = [
+  { key:'sylsM',     label:'First Names — Masc Syllables' },
+  { key:'sylsF',     label:'First Names — Fem Syllables' },
+  { key:'sylsN',     label:'First Names — Neutral Syllables' },
+  { key:'lnOnsets',  label:'Last Names — Onsets' },
+  { key:'lnNuclei',  label:'Last Names — Nuclei' },
+  { key:'lnEnd',     label:'Last Names — Endings' },
+];
+
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function renderPool(cKey, pool) {
+  const arr = getPool(cKey, pool.key);
+  const card = document.createElement('div');
+  card.className = 'pool-card';
+  card.innerHTML = `
+    <div class="pool-title">${pool.label} <span style="color:var(--text3);font-weight:400">(${arr.length})</span></div>
+    <div class="tag-list" id="tags-${pool.key}">
+      ${arr.map((s,i) => `<span class="tag">${s}<button class="tag-del" data-pool="${pool.key}" data-idx="${i}">✕</button></span>`).join('')}
+    </div>
+    <div class="add-row">
+      <input type="text" id="add-${pool.key}" placeholder="Add syllable..." maxlength="12"/>
+      <button class="btn primary" data-addpool="${pool.key}">Add</button>
+    </div>
+    <div class="batch-toggle" data-toggle="${pool.key}">Batch import ▾</div>
+    <div class="batch-panel" id="batch-${pool.key}">
+      <div class="batch-hint">Paste syllables separated by commas, spaces, or new lines.</div>
+      <textarea id="batchtext-${pool.key}" placeholder="lun, mira, vea, pia, bri&#10;cris flor sera"></textarea>
+      <div class="batch-row">
+        <span class="batch-preview" id="batchpreview-${pool.key}"></span>
+        <button class="btn primary" data-batchadd="${pool.key}">Import All</button>
+      </div>
+    </div>`;
+
+  card.querySelectorAll('.tag-del').forEach(b => b.addEventListener('click', () => {
+    const arr2 = getPool(cKey, b.dataset.pool);
+    arr2.splice(parseInt(b.dataset.idx), 1);
+    setPool(cKey, b.dataset.pool, arr2);
+    renderEditor();
+    showToast('Removed from ' + b.dataset.pool);
+  }));
+
+  const addBtn = card.querySelector('[data-addpool]');
+  const addInput = card.querySelector(`#add-${pool.key}`);
+  const doAdd = () => {
+    const val = addInput.value.trim().toLowerCase();
+    if (!val) return;
+    const arr2 = getPool(cKey, pool.key);
+    if (arr2.includes(val)) { showToast('Already in pool'); return; }
+    arr2.push(val);
+    setPool(cKey, pool.key, arr2);
+    addInput.value = '';
+    renderEditor();
+    showToast('Added: ' + val);
+  };
+  addBtn.addEventListener('click', doAdd);
+  addInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAdd(); });
+
+  // ── Batch import ──
+  const toggle = card.querySelector(`[data-toggle="${pool.key}"]`);
+  const panel = card.querySelector(`#batch-${pool.key}`);
+  toggle.addEventListener('click', () => {
+    panel.classList.toggle('open');
+    toggle.textContent = panel.classList.contains('open') ? 'Batch import ▴' : 'Batch import ▾';
+  });
+
+  const batchText = card.querySelector(`#batchtext-${pool.key}`);
+  const batchPreview = card.querySelector(`#batchpreview-${pool.key}`);
+  const parseBatch = () => {
+    const raw = batchText.value;
+    const parts = raw.split(/[,\n]+/).flatMap(s => s.trim().split(/\s+/)).map(s => s.trim().toLowerCase()).filter(Boolean);
+    const existing = getPool(cKey, pool.key);
+    const unique = [...new Set(parts)];
+    const newOnes = unique.filter(s => !existing.includes(s));
+    const dupes = unique.length - newOnes.length;
+    if (!unique.length) { batchPreview.textContent = ''; return { newOnes:[], dupes:0 }; }
+    batchPreview.textContent = `${newOnes.length} new${dupes ? `, ${dupes} already in pool` : ''}`;
+    return { newOnes, dupes };
+  };
+  batchText.addEventListener('input', parseBatch);
+
+  card.querySelector(`[data-batchadd="${pool.key}"]`).addEventListener('click', () => {
+    const { newOnes } = parseBatch();
+    if (!newOnes.length) { showToast('Nothing new to import'); return; }
+    const arr2 = [...getPool(cKey, pool.key), ...newOnes];
+    setPool(cKey, pool.key, arr2);
+    renderEditor();
+    showToast(`Imported ${newOnes.length} syllable${newOnes.length===1?'':'s'} into ${pool.label}`);
+  });
+
+  return card;
+}
+
+function renderEditor() {
+  const grid = document.getElementById('editorGrid');
+  grid.innerHTML = '';
+  POOLS.forEach(pool => grid.appendChild(renderPool(activeCulture, pool)));
+  updateStatus(activeCulture);
+}
+
+function updateStatus(cKey) {
+  const overrides = loadOverrides();
+  const hasOverride = overrides[cKey] && Object.keys(overrides[cKey]).length > 0;
+  document.getElementById('statusBar').textContent = hasOverride
+    ? `${CULTURES[cKey].label} has custom syllable pools active.`
+    : `${CULTURES[cKey].label} is using default syllable pools.`;
+}
+
+function populateCultureSelect() {
+  const sel = document.getElementById('cultSelect');
+  Object.entries(CULTURES).forEach(([key, d]) => {
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = d.label;
+    sel.appendChild(opt);
+  });
+}
+
+function populateQuickPoolSelect() {
+  const sel = document.getElementById('quickPoolSelect');
+  sel.innerHTML = '';
+  POOLS.forEach(pool => {
+    const opt = document.createElement('option');
+    opt.value = pool.key; opt.textContent = pool.label;
+    sel.appendChild(opt);
+  });
+}
+
+function parseQuickBatch() {
+  const raw = document.getElementById('quickBatchText').value;
+  const poolKey = document.getElementById('quickPoolSelect').value;
+  const parts = raw.split(/[,\n]+/).flatMap(s => s.trim().split(/\s+/)).map(s => s.trim().toLowerCase()).filter(Boolean);
+  const existing = getPool(activeCulture, poolKey);
+  const unique = [...new Set(parts)];
+  const newOnes = unique.filter(s => !existing.includes(s));
+  const dupes = unique.length - newOnes.length;
+  const preview = document.getElementById('quickBatchPreview');
+  if (!unique.length) { preview.textContent = ''; return { newOnes:[] }; }
+  preview.textContent = `${newOnes.length} new${dupes ? `, ${dupes} already in pool` : ''} → will add to ${CULTURES[activeCulture].label}`;
+  return { newOnes, poolKey };
+}
+
+document.getElementById('quickPoolSelect').addEventListener('change', parseQuickBatch);
+document.getElementById('quickBatchText').addEventListener('input', parseQuickBatch);
+document.getElementById('quickBatchAdd').addEventListener('click', () => {
+  const { newOnes, poolKey } = parseQuickBatch();
+  if (!newOnes || !newOnes.length) { showToast('Nothing new to import'); return; }
+  const arr = [...getPool(activeCulture, poolKey), ...newOnes];
+  setPool(activeCulture, poolKey, arr);
+  document.getElementById('quickBatchText').value = '';
+  document.getElementById('quickBatchPreview').textContent = '';
+  renderEditor();
+  showToast(`Imported ${newOnes.length} syllable${newOnes.length===1?'':'s'} into ${CULTURES[activeCulture].label}`);
+});
+
+document.getElementById('cultSelect').addEventListener('change', e => {
+  activeCulture = e.target.value;
+  renderEditor();
+  parseQuickBatch();
+});
+
+document.getElementById('resetCult').addEventListener('click', () => {
+  if (!confirm(`Reset ${CULTURES[activeCulture].label} to defaults?`)) return;
+  const overrides = loadOverrides();
+  delete overrides[activeCulture];
+  saveOverrides(overrides);
+  renderEditor();
+  showToast(`${CULTURES[activeCulture].label} reset to defaults`);
+});
+
+document.getElementById('resetAll').addEventListener('click', () => {
+  if (!confirm('Reset ALL cultures to defaults? This cannot be undone.')) return;
+  localStorage.removeItem('gh_ng_overrides');
+  renderEditor();
+  showToast('All cultures reset to defaults');
+});
+
+populateCultureSelect();
+populateQuickPoolSelect();
+renderEditor();
+</script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>God Hunter — Compendium</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<div class="ambient"></div>
+<div class="wrap">
+
+  <div class="header">
+    <div class="header-eyebrow">Ancient Heritage</div>
+    <h1 class="header-title">God <span>Hunter</span></h1>
+    <p class="header-sub">Compendium</p>
+    <div class="rule"><hr/><div class="gem"></div><hr/></div>
+  </div>
+
+  <nav class="nav">
+    <a class="nav-btn" href="index.html">Generator</a>
+    <a class="nav-btn active" href="compendium.html">Compendium</a>
+    <a class="nav-btn" href="culture-guide.html">Culture Guide</a>
+    <a class="nav-btn" href="syllable-editor.html">Syllable Editor</a>
+  </nav>
+
+  <!-- Filter bar -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;max-width:740px;width:100%;margin-bottom:16px">
+    <input type="text" id="searchInput" placeholder="Search names..." style="flex:1;min-width:180px"/>
+    <select id="cultureFilter" style="width:auto">
+      <option value="">All Cultures</option>
+    </select>
+    <select id="typeFilter" style="width:auto">
+      <option value="">All Types</option>
+      <option value="first">First Name</option>
+      <option value="last">Last Name</option>
+      <option value="full">Full Name</option>
+    </select>
+  </div>
+
+  <!-- Action bar -->
+  <div style="display:flex;gap:8px;justify-content:space-between;max-width:740px;width:100%;margin-bottom:20px;flex-wrap:wrap">
+    <div style="display:flex;gap:6px">
+      <button class="btn primary" id="exportTxt">Export .txt</button>
+      <button class="btn primary" id="exportCsv">Export .csv</button>
+    </div>
+    <button class="btn danger" id="clearAll">Clear All</button>
+  </div>
+
+  <!-- Name list -->
+  <div class="list-section" style="margin-top:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <span class="list-title" id="countLabel">0 names</span>
+      <span style="font-size:12px;color:var(--text3);font-style:italic">Click a name to edit its tag</span>
+    </div>
+    <div class="list-items" id="compList"></div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+<script src="cultures.js"></script>
+<script>
+
+let compendium = JSON.parse(localStorage.getItem('gh_ng_compendium') || '[]');
+let editingIdx = null;
+
+function save() { localStorage.setItem('gh_ng_compendium', JSON.stringify(compendium)); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function filtered() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const cult = document.getElementById('cultureFilter').value;
+  const type = document.getElementById('typeFilter').value;
+  return compendium.filter(e => {
+    if (q && !e.name.toLowerCase().includes(q)) return false;
+    if (cult && e.culture !== cult) return false;
+    if (type) {
+      const parts = e.name.trim().split(' ').length;
+      if (type === 'first' && parts !== 1) return false;
+      if (type === 'last' && parts !== 1) return false;
+      if (type === 'full' && parts < 2) return false;
+    }
+    return true;
+  });
+}
+
+function render() {
+  const items = filtered();
+  document.getElementById('countLabel').textContent = `${items.length} name${items.length !== 1 ? 's' : ''}`;
+  const el = document.getElementById('compList');
+  if (!items.length) { el.innerHTML = '<div class="list-empty">No names in the compendium yet. Generate some in the Generator.</div>'; return; }
+
+  el.innerHTML = items.map((item, i) => {
+    const realIdx = compendium.indexOf(item);
+    const cult = CULTURES[item.culture] ? CULTURES[item.culture].label : item.culture;
+    const star = item.fav ? '★' : '☆';
+    return `<div class="list-item" data-idx="${realIdx}">
+      <div style="flex:1;min-width:0;cursor:pointer" data-edit="${realIdx}">
+        <div class="list-item-name">${item.name}</div>
+        <div class="list-item-meta">${cult}${item.note ? ' · ' + item.note : ''}</div>
+      </div>
+      <div class="list-item-actions">
+        <button class="btn" style="font-size:14px;padding:3px 10px" data-fav="${realIdx}">${star}</button>
+        <button class="btn" data-copy="${item.name}">Copy</button>
+        <button class="btn danger" data-del="${realIdx}">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => {
+    navigator.clipboard.writeText(b.dataset.copy); showToast('Copied — ' + b.dataset.copy);
+  }));
+  el.querySelectorAll('[data-fav]').forEach(b => b.addEventListener('click', () => {
+    const idx = parseInt(b.dataset.fav);
+    compendium[idx].fav = !compendium[idx].fav;
+    save(); render();
+  }));
+  el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    compendium.splice(parseInt(b.dataset.del), 1); save(); render();
+  }));
+  el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
+    const idx = parseInt(b.dataset.edit);
+    const item = compendium[idx];
+    const note = prompt(`Tag for "${item.name}":`, item.note || '');
+    if (note !== null) { compendium[idx].note = note; save(); render(); }
+  }));
+}
+
+function populateFilters() {
+  const sel = document.getElementById('cultureFilter');
+  Object.entries(CULTURES).forEach(([key, d]) => {
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = d.label;
+    sel.appendChild(opt);
+  });
+}
+
+document.getElementById('searchInput').addEventListener('input', render);
+document.getElementById('cultureFilter').addEventListener('change', render);
+document.getElementById('typeFilter').addEventListener('change', render);
+
+document.getElementById('exportTxt').addEventListener('click', () => {
+  const lines = compendium.map(e => {
+    const cult = CULTURES[e.culture] ? CULTURES[e.culture].label : e.culture;
+    return `${e.name} [${cult}]${e.note ? ' — ' + e.note : ''}`;
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'god_hunter_compendium.txt'; a.click();
+});
+
+document.getElementById('exportCsv').addEventListener('click', () => {
+  const rows = [['Name','Culture','Tag','Favorite']];
+  compendium.forEach(e => {
+    const cult = CULTURES[e.culture] ? CULTURES[e.culture].label : e.culture;
+    rows.push([e.name, cult, e.note||'', e.fav ? 'Yes' : 'No']);
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'god_hunter_compendium.csv'; a.click();
+});
+
+document.getElementById('clearAll').addEventListener('click', () => {
+  if (!confirm('Clear the entire compendium?')) return;
+  compendium = []; save(); render(); showToast('Compendium cleared');
+});
+
+populateFilters();
+render();
+</script>
+</body>
+</html>
